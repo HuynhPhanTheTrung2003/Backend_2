@@ -1,7 +1,9 @@
 const { ObjectId } = require("mongodb");
+const bcrypt = require("bcryptjs");
 
 class ContactService {
   constructor(client) {
+    this.client = client;
     this.Contact = client.db().collection("contacts");
   }
 
@@ -12,6 +14,7 @@ class ContactService {
       address: payload.address,
       phone: payload.phone,
       favorite: payload.favorite,
+      ownerId: payload.ownerId,
     };
 
     Object.keys(contact).forEach(
@@ -22,12 +25,13 @@ class ContactService {
 
   async create(payload) {
     const contact = this.extractContactData(payload);
-
-    contact.favorite = contact.favorite === true;
-
     const result = await this.Contact.findOneAndUpdate(
-      { name: contact.name, email: contact.email },
-      { $set: contact },
+      {
+        name: contact.name,
+        email: contact.email,
+        ownerId: contact.ownerId,
+      },
+      { $set: { favorite: contact.favorite === true } },
       { returnDocument: "after", upsert: true },
     );
     return result;
@@ -38,21 +42,17 @@ class ContactService {
     return await cursor.toArray();
   }
 
-  async findByName(name) {
-    return await this.find({
-      name: { $regex: new RegExp(name), $options: "i" },
-    });
-  }
-
-  async findById(id) {
+  async findById(id, ownerId) {
     return await this.Contact.findOne({
       _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
+      ownerId: ownerId,
     });
   }
 
-  async update(id, payload) {
+  async update(id, payload, ownerId) {
     const filter = {
       _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
+      ownerId: ownerId,
     };
     const update = this.extractContactData(payload);
 
@@ -64,20 +64,37 @@ class ContactService {
     return result;
   }
 
-  async delete(id) {
+  async delete(id, ownerId) {
     const result = await this.Contact.findOneAndDelete({
       _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
+      ownerId: ownerId,
     });
     return result;
   }
 
-  async findFavorite() {
-    return await this.find({ favorite: true });
+  async deleteAll(ownerId) {
+    const result = await this.Contact.deleteMany({ ownerId: ownerId });
+    return result.deletedCount;
   }
 
-  async deleteAll() {
-    const result = await this.Contact.deleteMany({});
-    return result.deletedCount;
+  async createUser(payload) {
+    const user = {
+      username: payload.username,
+      password: await bcrypt.hash(payload.password, 10),
+    };
+    const result = await this.client
+      .db()
+      .collection("users")
+      .findOneAndUpdate(
+        { username: user.username },
+        { $setOnInsert: user },
+        { upsert: true, returnDocument: "after" },
+      );
+    return result;
+  }
+
+  async findUserByUsername(username) {
+    return await this.client.db().collection("users").findOne({ username });
   }
 }
 
