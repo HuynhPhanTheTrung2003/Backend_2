@@ -15,8 +15,8 @@ class ContactService {
       phone: payload.phone,
       favorite: payload.favorite,
       ownerId: payload.ownerId,
+      hobbies: payload.hobbies,
     };
-
     Object.keys(contact).forEach(
       (key) => contact[key] === undefined && delete contact[key],
     );
@@ -31,7 +31,7 @@ class ContactService {
         email: contact.email,
         ownerId: contact.ownerId,
       },
-      { $set: { favorite: contact.favorite === true } },
+      { $set: contact },
       { returnDocument: "after", upsert: true },
     );
     return result;
@@ -49,12 +49,12 @@ class ContactService {
     });
   }
 
-  async update(id, payload, ownerId) {
+  async update(id, payload) {
+    const update = this.extractContactData(payload);
     const filter = {
       _id: ObjectId.isValid(id) ? new ObjectId(id) : null,
-      ownerId: ownerId,
+      ownerId: update.ownerId,
     };
-    const update = this.extractContactData(payload);
 
     const result = await this.Contact.findOneAndUpdate(
       filter,
